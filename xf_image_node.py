@@ -1,23 +1,6 @@
 #!/usr/bin/env python3
 
-import rclpy
-from rclpy.node import Node
-from origincar_msg.msg import Sign
-from hbm_img_msgs.msg import HbmMsg1080P  # ĞŞÕıÁËÏûÏ¢ÀàĞÍÃû³Æ
-import base64
-import hashlib
-import hmac
-import json
-from urllib.parse import urlparse
-import ssl
-from datetime import datetime
-from time import mktime
-from urllib.parse import urlencode
-from wsgiref.handlers import format_date_time
-import websocket
-import threading
-import _thread as thread
-import numpy as np
+import è‡ªå·±å†™äº†
 import cv2
 
 class Event:
@@ -34,172 +17,99 @@ class ImageUnderstandingServer(Node):
     def __init__(self):
         super().__init__('image_understanding_server')
         
-        # ÉùÃ÷²ÎÊı
+        # å£°æ˜å‚æ•°
         self.declare_parameter('appid', '2f6a6aa9')
         self.declare_parameter('api_key', '255b0cfda6905b488c67776a057c931b')
         self.declare_parameter('api_secret', 'MGNhZmYxOGUwMzk5OTY3MTc2NjZhMGVl')
         
-        # ´´½¨¶©ÔÄÆ÷
-        self.sign_sub = self.create_subscription(
-            Sign,
-            '/sign_switch',
-            self.sign_callback,
-            10)
+        # åˆ›å»ºè®¢é˜…å™¨
+
         
-        # ¶©ÔÄÍ¼Ïñ»°Ìâ
-        self.image_sub = self.create_subscription(
-            HbmMsg1080P,
-            '/hbmem_img',
-            self.image_callback,
-            10)
+        # è®¢é˜…å›¾åƒè¯é¢˜
+  
         
-        self.get_logger().info("Í¼ÏñÀí½â·şÎñÒÑÆô¶¯£¬µÈ´ısign_data=10ĞÅºÅ...")
-        self.processing_lock = threading.Lock()  # ·ÀÖ¹ÖØ¸´´¦Àí
-        self.is_processing = False  # ´¦Àí×´Ì¬±êÖ¾
-        self.latest_image_msg = None  # ´æ´¢×îĞÂµÄÍ¼ÏñÏûÏ¢
-        self.image_lock = threading.Lock()  # ±£»¤Í¼ÏñÊı¾İµÄËø
 
     def image_callback(self, msg):
-        """´æ´¢×îĞÂµÄÍ¼ÏñÏûÏ¢"""
-        with self.image_lock:
-            self.latest_image_msg = msg
-            # self.get_logger().info(f"ÊÕµ½ĞÂÍ¼Ïñ: {msg.width}x{msg.height}, Í¨µÀÊı: {msg.channels}")
+        """å­˜å‚¨æœ€æ–°çš„å›¾åƒæ¶ˆæ¯"""
 
     def sign_callback(self, msg):
-        """µ±½ÓÊÕµ½sign_data=10Ê±´¥·¢Í¼ÏñÀí½â"""
-        if msg.sign_data == 10 and not self.is_processing:
-            self.get_logger().info("ÊÕµ½sign_data=10ĞÅºÅ£¬¿ªÊ¼´¦ÀíÍ¼Ïñ...")
-            
-            # ÉèÖÃ´¦Àí×´Ì¬±êÖ¾
+
+            # è®¾ç½®å¤„ç†çŠ¶æ€æ ‡å¿—
             with self.processing_lock:
-                if self.is_processing:  # Ë«ÖØ¼ì²éËø¶¨
+                if self.is_processing:  # åŒé‡æ£€æŸ¥é”å®š
                     return
                 self.is_processing = True
             
             try:
-                # ÔÚµ¥¶ÀµÄÏß³ÌÖĞ´¦ÀíÍ¼Ïñ
+                # åœ¨å•ç‹¬çš„çº¿ç¨‹ä¸­å¤„ç†å›¾åƒ
                 threading.Thread(target=self.process_latest_image).start()
             except Exception as e:
-                self.get_logger().error(f"´¦ÀíÏß³ÌÆô¶¯Ê§°Ü: {str(e)}")
+                self.get_logger().error(f"å¤„ç†çº¿ç¨‹å¯åŠ¨å¤±è´¥: {str(e)}")
                 self.is_processing = False
 
     def process_latest_image(self):
-        """´¦Àí×îĞÂÍ¼ÏñµÄºËĞÄÂß¼­"""
+        """å¤„ç†æœ€æ–°å›¾åƒçš„æ ¸å¿ƒé€»è¾‘"""
         try:
-            # »ñÈ¡×îĞÂµÄÍ¼ÏñÏûÏ¢
-            with self.image_lock:
-                if self.latest_image_msg is None:
-                    self.get_logger().error("Ã»ÓĞ¿ÉÓÃµÄÍ¼ÏñÊı¾İ")
-                    return
+
                     
-                image_msg = self.latest_image_msg
-                self.get_logger().info(f"´¦ÀíÍ¼Ïñ: {image_msg.width}x{image_msg.height}, Í¨µÀÊı: {image_msg.channels}")
-            
-            # ½«ROSÍ¼ÏñÏûÏ¢×ª»»ÎªOpenCVÍ¼Ïñ
+            # å°†ROSå›¾åƒæ¶ˆæ¯è½¬æ¢ä¸ºOpenCVå›¾åƒ
             img_np = np.frombuffer(image_msg.data, dtype=np.uint8).reshape(
                 (image_msg.height, image_msg.width, image_msg.channels))
             
-            # ½«BGR×ª»»ÎªRGB£¨Èç¹ûÍ¼ÏñÊÇBGR¸ñÊ½£©
+            # å°†BGRè½¬æ¢ä¸ºRGBï¼ˆå¦‚æœå›¾åƒæ˜¯BGRæ ¼å¼ï¼‰
             if image_msg.channels == 3:
                 img_rgb = cv2.cvtColor(img_np, cv2.COLOR_BGR2RGB)
             else:
                 img_rgb = img_np
             
-            # ½«Í¼Ïñ±àÂëÎªJPEG¸ñÊ½
+            # å°†å›¾åƒç¼–ç ä¸ºJPEGæ ¼å¼
             success, jpeg_data = cv2.imencode('.jpg', img_rgb, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
             
             if not success:
-                self.get_logger().error("Í¼Ïñ±àÂëÊ§°Ü")
+                self.get_logger().error("å›¾åƒç¼–ç å¤±è´¥")
                 return
                 
             jpeg_bytes = jpeg_data.tobytes()
-            self.get_logger().info(f"Í¼Ïñ±àÂë³É¹¦, ´óĞ¡: {len(jpeg_bytes)} ×Ö½Ú")
+            self.get_logger().info(f"å›¾åƒç¼–ç æˆåŠŸ, å¤§å°: {len(jpeg_bytes)} å­—èŠ‚")
             
-            # ×¼±¸ÎÊÌâ
-            question = [
-                {
-                    "role": "user", 
-                    "content": base64.b64encode(jpeg_bytes).decode('utf-8'), 
-                    "content_type": "image"
-                }
-            ]
+            # å‡†å¤‡é—®é¢˜
+            å¦‚æœéœ€è¦çš„è¯
+
             
-            # Ìí¼ÓÎÄ±¾Ö¸Áî
-            self.get_logger().info("×Ô¶¯·¢ËÍÎÊÌâ: ÃèÊöÍ¼Æ¬ÉÏÁ¢ÅÆµÄÄÚÈİ")
-            question = self.checklen(self.getText("user", "ÃèÊöÍ¼Æ¬ÉÏÁ¢ÅÆµÄÄÚÈİ", question))
-            
-            # »ñÈ¡²ÎÊı
+            # æ·»åŠ æ–‡æœ¬æŒ‡ä»¤
+
+            # è·å–å‚æ•°
             appid = self.get_parameter('appid').get_parameter_value().string_value
             api_key = self.get_parameter('api_key').get_parameter_value().string_value
             api_secret = self.get_parameter('api_secret').get_parameter_value().string_value
             
-            # »ñÈ¡Í¼ÏñÃèÊö
+            # è·å–å›¾åƒæè¿°
             client = XFImageClient(appid, api_key, api_secret, self.get_logger())
             raw_description = client.get_image_description(question)
             
-            # ÇåÀíÃèÊöÄÚÈİ
+            # æ¸…ç†æè¿°å†…å®¹
             cleaned_description = self.clean_description(raw_description)
             
-            self.get_logger().info(f"Í¼ÏñÃèÊöÉú³É³É¹¦: {cleaned_description}")
+            self.get_logger().info(f"å›¾åƒæè¿°ç”ŸæˆæˆåŠŸ: {cleaned_description}")
             
         except Exception as e:
-            self.get_logger().error(f"Í¼Ïñ´¦ÀíÊ§°Ü: {str(e)}")
+            self.get_logger().error(f"å›¾åƒå¤„ç†å¤±è´¥: {str(e)}")
         finally:
-            # ÖØÖÃ´¦Àí×´Ì¬±êÖ¾
+            # é‡ç½®å¤„ç†çŠ¶æ€æ ‡å¿—
             with self.processing_lock:
                 self.is_processing = False
 
-    def clean_description(self, description):
-        """
-        ÇåÀíÃèÊöÎÄ±¾£¬ÒÆ³ı²»±ØÒªµÄ·ûºÅºÍ¸ñÊ½±ê¼Ç
-        """
-        # Èç¹ûÃèÊöÎª¿Õ£¬Ö±½Ó·µ»Ø
-        if not description:
-            return description
-        
-        # ÒÆ³ıÁĞ±í±ê¼Ç£¨Èç \n1. \n2. µÈ£©
-        import re
-        description = re.sub(r'\n\d+\.\s*', ' ', description)  # ÒÆ³ıÊı×Ö±àºÅ
-        
-        # ÒÆ³ıÏîÄ¿·ûºÅºÍËõ½ø
-        description = description.replace('\n   - ', ' ')
-        description = description.replace('\n- ', ' ')
-        description = description.replace('   - ', ' ')
-        
-        # ÒÆ³ı¶àÓàµÄ»»ĞĞ·û
-        description = description.replace('\n', ' ')
-        
-        # ºÏ²¢¶àÓàµÄ¿Õ¸ñ
-        description = re.sub(r'\s+', ' ', description)
-        # È·±£ÒÔ¾äºÅ½áÎ²
-        if not description.endswith('¡£') and not description.endswith('.') and not description.endswith('£¡'):
-            description += '¡£'
-        
-        return description.strip()
+
     
     def getText(self, role, content, text_list):
-        """Ìí¼ÓÏûÏ¢µ½¶Ô»°ÁĞ±í"""
+        """æ·»åŠ æ¶ˆæ¯åˆ°å¯¹è¯åˆ—è¡¨"""
         jsoncon = {}
         jsoncon["role"] = role
         jsoncon["content"] = content
         text_list.append(jsoncon)
         return text_list
     
-    def getlength(self, text):
-        """¼ÆËã¶Ô»°³¤¶È"""
-        length = 0
-        for content in text:
-            temp = content["content"]
-            leng = len(temp)
-            length += leng
-        return length
     
-    def checklen(self, text):
-        """¼ì²é²¢ÏŞÖÆ¶Ô»°³¤¶È"""
-        while (self.getlength(text[1:]) > 8000):
-            del text[1]
-        return text
-
 
 class XFImageClient:
     def __init__(self, appid, api_key, api_secret, logger=None):
@@ -218,13 +128,13 @@ class XFImageClient:
             print(message)
 
     def get_image_description(self, question):
-        # »ñÈ¡ÃèÊö
+        # è·å–æè¿°
         self.completion_event = Event()
         self.answer = ""
         
         ws_param = Ws_Param(self.appid, self.api_key, self.api_secret, self.url)
         ws_url = ws_param.create_url()
-        self.log(f"Á¬½ÓÑ¶·ÉAPI: {ws_url}")
+        self.log(f"è¿æ¥è®¯é£API: {ws_url}")
         
         self.ws = websocket.WebSocketApp(
             ws_url,
@@ -236,27 +146,27 @@ class XFImageClient:
         self.ws.appid = self.appid
         self.ws.question = question
         
-        # ÔËĞĞWebSocket
-        self.log("Æô¶¯WebSocketÁ¬½Ó...")
+        # è¿è¡ŒWebSocket
+        self.log("å¯åŠ¨WebSocketè¿æ¥...")
         self.ws.run_forever(sslopt={"cert_reqs": ssl.CERT_NONE})
         
-        # µÈ´ı½á¹û»ò³¬Ê±
-        if not self.completion_event.wait(timeout=30):  # 30Ãë³¬Ê±
-            self.log("APIµ÷ÓÃ³¬Ê±")
-            return "APIµ÷ÓÃ³¬Ê±£¬ÇëÖØÊÔ"
+        # ç­‰å¾…ç»“æœæˆ–è¶…æ—¶
+        if not self.completion_event.wait(timeout=30):  # 30ç§’è¶…æ—¶
+            self.log("APIè°ƒç”¨è¶…æ—¶")
+            return "APIè°ƒç”¨è¶…æ—¶ï¼Œè¯·é‡è¯•"
         
         return self.answer
 
     def on_message(self, ws, message):
         try:
-            # ¼ÇÂ¼Ô­Ê¼ÏìÓ¦
-            self.log(f"ÊÕµ½Ô­Ê¼ÏìÓ¦: {message[:500]}...")
+            # è®°å½•åŸå§‹å“åº”
+            self.log(f"æ”¶åˆ°åŸå§‹å“åº”: {message[:500]}...")
             
             data = json.loads(message)
             code = data['header']['code']
             
             if code != 0:
-                error_msg = f'API´íÎó: {code}, {data["header"]["message"]}'
+                error_msg = f'APIé”™è¯¯: {code}, {data["header"]["message"]}'
                 self.log(error_msg)
                 ws.close()
             else:
@@ -264,33 +174,33 @@ class XFImageClient:
                 status = choices["status"]
                 content = choices["text"][0]["content"]
                 
-                # ¼ÇÂ¼ÄÚÈİĞÅÏ¢
-                self.log(f"×´Ì¬: {status}, ÄÚÈİ: {content}")
+                # è®°å½•å†…å®¹ä¿¡æ¯
+                self.log(f"çŠ¶æ€: {status}, å†…å®¹: {content}")
                 
                 self.answer += content
                 if status == 2:
-                    self.log(f"×îÖÕÃèÊöÄÚÈİ: '{self.answer}'")
+                    self.log(f"æœ€ç»ˆæè¿°å†…å®¹: '{self.answer}'")
                     ws.close()
         except Exception as e:
-            self.log(f"´¦ÀíÏûÏ¢Ê§°Ü: {str(e)}")
+            self.log(f"å¤„ç†æ¶ˆæ¯å¤±è´¥: {str(e)}")
         finally:
             self.completion_event.set()
 
     def on_error(self, ws, error):
-        self.log(f"WebSocket´íÎó: {error}")
+        self.log(f"WebSocketé”™è¯¯: {error}")
         self.completion_event.set()
 
     def on_close(self, ws, close_status_code, close_msg):
-        self.log(f"Á¬½Ó¹Ø±Õ: {close_status_code} - {close_msg}")
+        self.log(f"è¿æ¥å…³é—­: {close_status_code} - {close_msg}")
         self.completion_event.set()
 
     def on_open(self, ws):
-        self.log("WebSocketÁ¬½ÓÒÑ½¨Á¢£¬·¢ËÍÇëÇó...")
-        # Ê¹ÓÃ thread Ä£¿éÆô¶¯ĞÂÏß³Ì
+        self.log("WebSocketè¿æ¥å·²å»ºç«‹ï¼Œå‘é€è¯·æ±‚...")
+        # ä½¿ç”¨ thread æ¨¡å—å¯åŠ¨æ–°çº¿ç¨‹
         thread.start_new_thread(self.run, (ws,))
     
     def run(self, ws, *args):
-        self.log("·¢ËÍÇëÇóÊı¾İ...")
+        self.log("å‘é€è¯·æ±‚æ•°æ®...")
         data = json.dumps(self.gen_params(appid=ws.appid, question=ws.question))
         ws.send(data)
 
